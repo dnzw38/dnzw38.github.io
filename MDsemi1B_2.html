@@ -1,0 +1,145 @@
+<html lang="ja">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="Content-Style-Type" content="text/css">
+<meta http-equiv="Content-Script-Type" content="text/javascript">
+<title>Yahoo!JAPAN 自然言語理解Web APIとジオコーダAPIのサンプル</title>
+</head>
+<body>
+
+<h1>Yahoo!JAPAN 自然言語理解Web APIとジオコーダAPIのサンプル</h1>
+
+<p>
+参考：<br>
+<a href="https://developer.yahoo.co.jp/webapi/jlp/nlu/v2/">https://developer.yahoo.co.jp/webapi/jlp/nlu/v2/</a>
+<br>
+<a href="https://developer.yahoo.co.jp/webapi/map/openlocalplatform/v1/geocoder.html">https://developer.yahoo.co.jp/webapi/map/openlocalplatform/v1/geocoder.html</a>
+<br>
+<a href="https://developer.yahoo.co.jp/weather/">https://developer.yahoo.co.jp/weather/</a>
+</p>
+
+<p>
+<textarea style="width: 80%;height: 100px;line-height: 1.5em;" id="textForm">
+東京都渋谷区代々木2-21-1
+</textarea>
+</p>
+
+<p>
+<button id="queryButton">実行</button>
+</p>
+
+<p>
+<div id="resultOutput"></div>
+</p>
+
+
+<script>
+const textForm = document.querySelector('#textForm'); // テキスト入力欄
+const queryButton  = document.querySelector('#queryButton'); // 実行ボタン
+const resultOutput = document.querySelector('#resultOutput'); // 結果出力エリア
+
+const NLU_API_URL = "https://jlp.yahooapis.jp/NLUService/V2/analyze?appid="; // 自然言語理解APIのリクエストURL
+const GEOCODER_API_URL = "https://map.yahooapis.jp/geocode/V1/geoCoder?appid="; // ジオコーダAPIのリクエストURL
+const WEATHER_API_URL = "https://map.yahooapis.jp/weather/V1/place?appid="; // 気象情報APIのリクエストURL
+
+const APPID = "dj00aiZpPVh2UERMZ0VLd3F6WSZzPWNvbnN1bWVyc2VjcmV0Jng9YTI-"; // あなたのアプリケーションID
+const nluQueryURL = NLU_API_URL + APPID;
+const geocoderQueryURL = GEOCODER_API_URL + APPID;
+const weatherQueryURL = WEATHER_API_URL + APPID;
+
+let output = "";
+
+queryButton.addEventListener('click', function(){
+  let queryText = textForm.value; // フォームからのテキストの取得
+  let newText = queryText.replace(/\r?\n/g,'').replace(/\0/g,''); // 余計な文字の削除
+
+  // 自然言語理解APIのリクエスト
+  const nluRequest = new XMLHttpRequest();
+  nluRequest.open('POST', nluQueryURL, true);
+  nluRequest.setRequestHeader('Content-Type', 'application/json');
+
+  var nluPostdata = {
+    "id": "1234-1",
+    "jsonrpc" : "2.0",
+    "method" : "jlp.nluservice.analyze",
+    "params" : { "q" : newText },
+  };
+  var nluJsondata = JSON.stringify(nluPostdata);
+
+  nluRequest.onreadystatechange = function() {
+    if (nluRequest.readyState === 4 && nluRequest.status === 200) {
+      let res = nluRequest.responseText;
+      console.log(res);
+
+      let obj = JSON.parse(res);
+      Object.keys(obj.result).forEach(function (key) {
+        output = output + "<br>" + key + ": " + obj.result[key];
+      });
+      output = output + "<br>-------<br>";
+      resultOutput.innerHTML = output;
+	  // 時刻を尋ねた場合は現在の時刻を返す
+      if (newText.includes("何時") || newText.includes("何じ")) {
+        let now = new Date();
+        let hours = now.getHours().toString().padStart(2, "0");
+        let minutes = now.getMinutes().toString().padStart(2, "0");
+        let time = hours + ":" + minutes;
+        output += "<br>現在の時刻: " + time;
+        resultOutput.innerHTML = output;
+      } else {
+      // ジオコーダAPIのリクエスト
+      const geocoderRequest = new XMLHttpRequest();
+      geocoderRequest.open('GET', geocoderQueryURL + "&query=" + newText, true);
+
+      geocoderRequest.onreadystatechange = function() {
+        if (geocoderRequest.readyState === 4 && geocoderRequest.status === 200) {
+          let res = geocoderRequest.responseText;
+          console.log(res);
+
+          let obj = new DOMParser().parseFromString(res, "text/xml");
+          let location = obj.getElementsByTagName("Geometry")[0].getElementsByTagName("Coordinates")[0].textContent;
+
+          output += "<br>位置情報: " + location;
+          resultOutput.innerHTML = output;
+
+          // 気象情報APIのリクエスト
+          const weatherRequest = new XMLHttpRequest();
+          weatherRequest.open('GET', weatherQueryURL + "&coordinates=" + location, true);
+
+          weatherRequest.onreadystatechange = function() {
+            if (weatherRequest.readyState === 4 && weatherRequest.status === 200) {
+              let res = weatherRequest.responseText;
+              console.log(res);
+
+              let parser = new DOMParser();
+              let xmlDoc = parser.parseFromString(res, "text/xml");
+
+              let weatherNode = xmlDoc.querySelector("Weather");
+
+              let weather = weatherNode ? weatherNode.textContent : "Unknown";
+              output += "<br><strong>現在の天気:</strong> " + weather;
+
+              resultOutput.innerHTML = output;
+            }
+          };
+
+          weatherRequest.setRequestHeader('Content-Type', 'application/json');
+          weatherRequest.send();
+        }
+      };
+
+      geocoderRequest.send();
+    }
+  }
+  };
+
+  nluRequest.send(nluJsondata);
+});
+</script>
+
+<!-- Yahoo!JAPANのAPIを利用したときはクレジット表記が必要 -->
+<p>
+Web Services by Yahoo! JAPAN （https://developer.yahoo.co.jp/sitemap/）
+</p>
+</body>
+</html>
